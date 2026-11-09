@@ -7,8 +7,6 @@ import {
   I18nModule,
   QueryResolver,
 } from 'nestjs-i18n';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { HelloModule } from './hello/hello.module';
 
 @Module({
@@ -18,17 +16,15 @@ import { HelloModule } from './hello/hello.module';
       fallbackLanguage: 'en',
       loaderOptions: {
         path: path.join(__dirname, '/i18n/'),
-        watch: true,
+        watch: process.env.NODE_ENV !== 'production',
       },
       resolvers: [
-        { use: QueryResolver, options: ['lang'] }, // Hỗ trợ query ?lang=vi hoặc ?lang=en
-        AcceptLanguageResolver, // Hỗ trợ header Accept-Language
+        { use: QueryResolver, options: ['lang'] },
+        AcceptLanguageResolver,
         new HeaderResolver(['x-custom-lang']),
       ],
     }),
     HelloModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}

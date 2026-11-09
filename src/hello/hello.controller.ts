@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HelloService } from './hello.service';
 
 @ApiTags('Hello')
@@ -9,6 +9,7 @@ export class HelloController {
 
   @Get()
   @ApiOperation({ summary: 'Get localized hello message' })
+  @ApiQuery({ name: 'lang', required: false, enum: ['en', 'vi'] })
   @ApiResponse({
     status: 200,
     description: 'Returns hello message based on locale',
@@ -17,7 +18,7 @@ export class HelloController {
       example: 'Hello World!',
     },
   })
-  async getHello(): Promise<string> {
+  getHello(): string {
     return this.helloService.getHello();
   }
 }

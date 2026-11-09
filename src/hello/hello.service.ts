@@ -5,8 +5,8 @@ import { I18nContext, I18nService } from 'nestjs-i18n';
 export class HelloService {
   constructor(private readonly i18n: I18nService) {}
 
-  async getHello(): Promise<string> {
-    const lang = I18nContext.current()?.lang || 'en';
+  getHello(): string {
+    const lang = I18nContext.current()?.lang;
     return this.i18n.t('common.hello', { lang });
   }
 }
