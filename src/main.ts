@@ -10,7 +10,12 @@ async function bootstrap() {
   const SWAGGER_PATH = 'api/docs';
 
   app.setGlobalPrefix('api');
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }),
+  );
 
   const config = new DocumentBuilder()
     .setTitle('NestJS Tutorial API')

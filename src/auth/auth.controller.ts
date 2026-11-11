@@ -49,7 +49,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout and blacklist current token' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
   logout(@Req() req: AuthenticatedRequest) {
-    return this.authService.logout(req.token, req.user.exp);
+    return this.authService.logout(req.user.jti, req.user.exp);
   }
 
   @Get('me')

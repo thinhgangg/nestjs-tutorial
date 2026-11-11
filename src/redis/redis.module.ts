@@ -14,8 +14,10 @@ const DEFAULT_REDIS_PORT = 6379;
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         return new Redis({
-          host: configService.get<string>('REDIS_HOST'),
-          port: configService.get<number>('REDIS_PORT') ?? DEFAULT_REDIS_PORT,
+          host: configService.getOrThrow<string>('REDIS_HOST'),
+          port:
+            Number(configService.get<number>('REDIS_PORT')) ||
+            DEFAULT_REDIS_PORT,
         });
       },
     },

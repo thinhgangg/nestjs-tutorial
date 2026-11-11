@@ -14,7 +14,7 @@ const DEFAULT_JWT_EXPIRES_IN = 3600;
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
+        secret: configService.getOrThrow<string>('JWT_SECRET'),
         signOptions: {
           expiresIn:
             Number(configService.get<number>('JWT_EXPIRES_IN')) ||

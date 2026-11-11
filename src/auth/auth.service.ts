@@ -1,11 +1,13 @@
 import {
   ConflictException,
   Injectable,
-  NotFoundException,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
+import { I18nContext, I18nService } from 'nestjs-i18n';
 import { RedisService } from '../redis/redis.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
@@ -14,6 +16,9 @@ import { RegisterDto } from './dto/register.dto';
 const SALT_ROUNDS = 10;
 const MS_PER_SECOND = 1000;
 const DEFAULT_TTL_SECONDS = 3600;
+const PG_UNIQUE_VIOLATION = '23505';
+const DUMMY_BCRYPT_HASH =
+  '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
 
 @Injectable()
 export class AuthService {
@@ -21,20 +26,35 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
+    private readonly i18n: I18nService,
   ) {}
 
   async register(dto: RegisterDto) {
-    const existingUser = await this.usersService.findByEmail(dto.email);
+    const lang = I18nContext.current()?.lang;
+    const normalizedEmail = dto.email.trim().toLowerCase();
+
+    const existingUser = await this.usersService.findByEmail(normalizedEmail);
     if (existingUser) {
-      throw new ConflictException('Email already exists');
+      throw new ConflictException(
+        this.i18n.t('common.auth.email_exists', { lang }),
+      );
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
-    const user = await this.usersService.createUser({
-      email: dto.email,
-      username: dto.username,
-      password: hashedPassword,
-    });
+    const user = await this.usersService
+      .createUser({
+        email: normalizedEmail,
+        username: dto.username,
+        password: hashedPassword,
+      })
+      .catch((error: { code?: string }) => {
+        if (error?.code === PG_UNIQUE_VIOLATION) {
+          throw new ConflictException(
+            this.i18n.t('common.auth.email_exists', { lang }),
+          );
+        }
+        throw new InternalServerErrorException('Failed to create user');
+      });
 
     return {
       id: user.id,
@@ -45,17 +65,24 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.usersService.findByEmail(dto.email);
-    if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
+    const lang = I18nContext.current()?.lang;
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const user = await this.usersService.findByEmail(normalizedEmail);
+
+    const passwordHash = user ? user.password : DUMMY_BCRYPT_HASH;
+    const isPasswordValid = await bcrypt.compare(dto.password, passwordHash);
+
+    if (!user || !isPasswordValid) {
+      throw new UnauthorizedException(
+        this.i18n.t('common.auth.invalid_credentials', { lang }),
+      );
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
-
-    const payload = { sub: user.id, email: user.email };
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      jti: randomUUID(),
+    };
     const accessToken = await this.jwtService.signAsync(payload, {
       expiresIn: DEFAULT_TTL_SECONDS,
     });
@@ -63,18 +90,22 @@ export class AuthService {
     return { accessToken };
   }
 
-  async logout(token: string, exp?: number) {
+  async logout(jti: string, exp?: number) {
+    const lang = I18nContext.current()?.lang;
     const nowInSeconds = Math.floor(Date.now() / MS_PER_SECOND);
     const ttl = exp ? Math.max(exp - nowInSeconds, 1) : DEFAULT_TTL_SECONDS;
 
-    await this.redisService.setBlacklistToken(token, ttl);
-    return { message: 'Logged out successfully' };
+    await this.redisService.setBlacklistToken(jti, ttl);
+    return { message: this.i18n.t('common.auth.logged_out', { lang }) };
   }
 
   async getCurrentUser(userId: number) {
+    const lang = I18nContext.current()?.lang;
     const user = await this.usersService.findById(userId);
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new UnauthorizedException(
+        this.i18n.t('common.auth.unauthorized', { lang }),
+      );
     }
 
     return {

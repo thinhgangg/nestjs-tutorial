@@ -6,17 +6,20 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { I18nContext, I18nService } from 'nestjs-i18n';
 import { RedisService } from '../../redis/redis.service';
 
 const BEARER_PREFIX = 'Bearer ';
 
+export interface JwtPayload {
+  sub: number;
+  email: string;
+  jti: string;
+  exp?: number;
+}
+
 export interface AuthenticatedRequest extends Request {
-  user: {
-    sub: number;
-    email: string;
-    exp?: number;
-  };
-  token: string;
+  user: JwtPayload;
 }
 
 @Injectable()
@@ -24,28 +27,40 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
+    private readonly i18n: I18nService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const lang = I18nContext.current()?.lang;
     const token = this.extractToken(request);
 
     if (!token) {
-      throw new UnauthorizedException('Missing access token');
+      throw new UnauthorizedException(
+        this.i18n.t('common.auth.missing_token', { lang }),
+      );
     }
 
-    const isBlacklisted = await this.redisService.checkTokenBlacklisted(token);
+    const payload = await this.jwtService
+      .verifyAsync<JwtPayload>(token)
+      .catch(() => null);
+
+    if (!payload || !payload.jti) {
+      throw new UnauthorizedException(
+        this.i18n.t('common.auth.invalid_token', { lang }),
+      );
+    }
+
+    const isBlacklisted = await this.redisService.checkTokenBlacklisted(
+      payload.jti,
+    );
     if (isBlacklisted) {
-      throw new UnauthorizedException('Token has been revoked');
-    }
-
-    const payload = await this.jwtService.verifyAsync(token).catch(() => null);
-    if (!payload) {
-      throw new UnauthorizedException('Invalid or expired access token');
+      throw new UnauthorizedException(
+        this.i18n.t('common.auth.token_revoked', { lang }),
+      );
     }
 
     request.user = payload;
-    request.token = token;
     return true;
   }
 

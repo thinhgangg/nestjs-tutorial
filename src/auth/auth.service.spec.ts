@@ -2,6 +2,7 @@ import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
+import { I18nService } from 'nestjs-i18n';
 import { RedisService } from '../redis/redis.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
@@ -11,6 +12,7 @@ describe('AuthService', () => {
   let usersService: Record<string, jest.Mock>;
   let jwtService: Record<string, jest.Mock>;
   let redisService: Record<string, jest.Mock>;
+  let i18nService: Record<string, jest.Mock>;
 
   beforeEach(async () => {
     usersService = {
@@ -24,6 +26,9 @@ describe('AuthService', () => {
     redisService = {
       setBlacklistToken: jest.fn(),
     };
+    i18nService = {
+      t: jest.fn((key: string) => key),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -31,13 +36,14 @@ describe('AuthService', () => {
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: jwtService },
         { provide: RedisService, useValue: redisService },
+        { provide: I18nService, useValue: i18nService },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
   });
 
-  it('register - should create a new user', async () => {
+  it('register - should create a new user with lowercase email', async () => {
     usersService.findByEmail.mockResolvedValue(null);
     usersService.createUser.mockResolvedValue({
       id: 1,
@@ -47,7 +53,7 @@ describe('AuthService', () => {
     });
 
     const result = await service.register({
-      email: 'test@example.com',
+      email: 'Test@Example.com',
       username: 'testuser',
       password: 'Password@123456',
     });
@@ -98,11 +104,14 @@ describe('AuthService', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
-  it('logout - should save token to redis blacklist', async () => {
-    const result = await service.logout('mock-jwt-token');
+  it('logout - should save jti to redis blacklist', async () => {
+    const result = await service.logout('mock-jti');
 
-    expect(redisService.setBlacklistToken).toHaveBeenCalled();
-    expect(result).toEqual({ message: 'Logged out successfully' });
+    expect(redisService.setBlacklistToken).toHaveBeenCalledWith(
+      'mock-jti',
+      3600,
+    );
+    expect(result).toEqual({ message: 'common.auth.logged_out' });
   });
 
   it('getCurrentUser - should return user info', async () => {
@@ -116,5 +125,12 @@ describe('AuthService', () => {
     const result = await service.getCurrentUser(1);
     expect(result.id).toBe(1);
   });
-});
 
+  it('getCurrentUser - should throw UnauthorizedException if user was deleted', async () => {
+    usersService.findById.mockResolvedValue(null);
+
+    await expect(service.getCurrentUser(999)).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+});
