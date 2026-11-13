@@ -7,11 +7,12 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-
-const MAX_EMAIL_LENGTH = 255;
-const MAX_USERNAME_LENGTH = 50;
-const MIN_PASSWORD_LENGTH = 12;
-const MAX_PASSWORD_LENGTH = 64;
+import {
+  MAX_EMAIL_LENGTH,
+  MAX_PASSWORD_LENGTH,
+  MAX_USERNAME_LENGTH,
+  MIN_PASSWORD_LENGTH,
+} from '../auth.constants';
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@example.com' })

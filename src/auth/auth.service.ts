@@ -10,15 +10,15 @@ import { randomUUID } from 'crypto';
 import { I18nContext, I18nService } from 'nestjs-i18n';
 import { RedisService } from '../redis/redis.service';
 import { UsersService } from '../users/users.service';
+import {
+  DEFAULT_TTL_SECONDS,
+  DUMMY_BCRYPT_HASH,
+  MS_PER_SECOND,
+  PG_UNIQUE_VIOLATION,
+  SALT_ROUNDS,
+} from './auth.constants';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-
-const SALT_ROUNDS = 10;
-const MS_PER_SECOND = 1000;
-const DEFAULT_TTL_SECONDS = 3600;
-const PG_UNIQUE_VIOLATION = '23505';
-const DUMMY_BCRYPT_HASH =
-  '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
 
 @Injectable()
 export class AuthService {
@@ -33,8 +33,8 @@ export class AuthService {
     const lang = I18nContext.current()?.lang;
     const normalizedEmail = dto.email.trim().toLowerCase();
 
-    const existingUser = await this.usersService.findByEmail(normalizedEmail);
-    if (existingUser) {
+    const isEmailExists = await this.usersService.existsByEmail(normalizedEmail);
+    if (isEmailExists) {
       throw new ConflictException(
         this.i18n.t('common.auth.email_exists', { lang }),
       );

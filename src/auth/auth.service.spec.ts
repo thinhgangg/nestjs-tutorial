@@ -16,6 +16,7 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     usersService = {
+      existsByEmail: jest.fn(),
       findByEmail: jest.fn(),
       findById: jest.fn(),
       createUser: jest.fn(),
@@ -44,7 +45,7 @@ describe('AuthService', () => {
   });
 
   it('register - should create a new user with lowercase email', async () => {
-    usersService.findByEmail.mockResolvedValue(null);
+    usersService.existsByEmail.mockResolvedValue(false);
     usersService.createUser.mockResolvedValue({
       id: 1,
       email: 'test@example.com',
@@ -59,14 +60,12 @@ describe('AuthService', () => {
     });
 
     expect(result.email).toBe('test@example.com');
+    expect(usersService.existsByEmail).toHaveBeenCalledWith('test@example.com');
     expect(usersService.createUser).toHaveBeenCalled();
   });
 
   it('register - should throw ConflictException if email exists', async () => {
-    usersService.findByEmail.mockResolvedValue({
-      id: 1,
-      email: 'test@example.com',
-    });
+    usersService.existsByEmail.mockResolvedValue(true);
 
     await expect(
       service.register({

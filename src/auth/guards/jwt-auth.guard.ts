@@ -8,8 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { I18nContext, I18nService } from 'nestjs-i18n';
 import { RedisService } from '../../redis/redis.service';
-
-const BEARER_PREFIX = 'Bearer ';
+import { BEARER_PREFIX } from '../auth.constants';
 
 export interface JwtPayload {
   sub: number;

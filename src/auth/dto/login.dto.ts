@@ -1,9 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
-
-const MAX_EMAIL_LENGTH = 255;
-const MAX_PASSWORD_LENGTH = 64;
+import { MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH } from '../auth.constants';
 
 export class LoginDto {
   @ApiProperty({ example: 'user@example.com' })
