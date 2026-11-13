@@ -1,1 +1,12 @@
-{ "hello": "Xin chào thế giới!" }
+{
+  "hello": "Xin chào thế giới!",
+  "auth": {
+    "email_exists": "Email đã tồn tại",
+    "invalid_credentials": "Email hoặc mật khẩu không đúng",
+    "logged_out": "Đăng xuất thành công",
+    "missing_token": "Thiếu access token",
+    "token_revoked": "Token đã bị thu hồi",
+    "invalid_token": "Token không hợp lệ hoặc đã hết hạn",
+    "unauthorized": "Không có quyền truy cập"
+  }
+}
