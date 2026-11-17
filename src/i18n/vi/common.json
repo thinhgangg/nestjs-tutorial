@@ -8,5 +8,17 @@
     "token_revoked": "Token đã bị thu hồi",
     "invalid_token": "Token không hợp lệ hoặc đã hết hạn",
     "unauthorized": "Không có quyền truy cập"
+  },
+  "user": {
+    "username_exists": "Username đã tồn tại"
+  },
+  "attachment": {
+    "invalid_type": "Chỉ chấp nhận file ảnh (JPEG, PNG, WebP)",
+    "file_too_large": "Dung lượng file không được vượt quá 5MB"
+  },
+  "profile": {
+    "not_found": "Không tìm thấy thông tin profile",
+    "cannot_follow_self": "Không thể tự follow chính mình",
+    "cannot_unfollow_self": "Không thể unfollow chính mình"
   }
 }

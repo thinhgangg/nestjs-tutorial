@@ -1,13 +1,21 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as path from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const logger = new Logger('Bootstrap');
   const SWAGGER_PATH = 'api/docs';
+  const PUBLIC_DIR = 'public';
+  const PUBLIC_PREFIX = '/public/';
+
+  app.useStaticAssets(path.join(process.cwd(), PUBLIC_DIR), {
+    prefix: PUBLIC_PREFIX,
+  });
 
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

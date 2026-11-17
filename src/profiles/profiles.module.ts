@@ -1,0 +1,22 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AttachmentsModule } from '../attachments/attachments.module';
+import { AuthModule } from '../auth/auth.module';
+import { UsersModule } from '../users/users.module';
+import { Follow } from './entities/follow.entity';
+import { ProfilesController } from './profiles.controller';
+import { ProfilesService } from './profiles.service';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Follow]),
+    UsersModule,
+    AttachmentsModule,
+    AuthModule,
+  ],
+  controllers: [ProfilesController],
+  providers: [ProfilesService],
+  exports: [ProfilesService],
+})
+export class ProfilesModule {}
+

@@ -8,8 +8,12 @@ import {
   I18nModule,
   QueryResolver,
 } from 'nestjs-i18n';
+import { AttachmentsModule } from './attachments/attachments.module';
+import { Attachment } from './attachments/entities/attachment.entity';
 import { AuthModule } from './auth/auth.module';
 import { HelloModule } from './hello/hello.module';
+import { Follow } from './profiles/entities/follow.entity';
+import { ProfilesModule } from './profiles/profiles.module';
 import { RedisModule } from './redis/redis.module';
 import { User } from './users/entities/user.entity';
 import { UsersModule } from './users/users.module';
@@ -28,7 +32,7 @@ const DEFAULT_DB_PORT = 5432;
         username: configService.getOrThrow<string>('DB_USERNAME'),
         password: configService.getOrThrow<string>('DB_PASSWORD'),
         database: configService.getOrThrow<string>('DB_NAME'),
-        entities: [User],
+        entities: [User, Follow, Attachment],
         synchronize: false,
       }),
     }),
@@ -47,6 +51,8 @@ const DEFAULT_DB_PORT = 5432;
     RedisModule,
     UsersModule,
     AuthModule,
+    AttachmentsModule,
+    ProfilesModule,
     HelloModule,
   ],
 })
