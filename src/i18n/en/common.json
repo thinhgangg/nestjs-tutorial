@@ -1,1 +1,12 @@
-{ "hello": "Hello World!" }
+{
+  "hello": "Hello World!",
+  "auth": {
+    "email_exists": "Email already exists",
+    "invalid_credentials": "Invalid email or password",
+    "logged_out": "Logged out successfully",
+    "missing_token": "Missing access token",
+    "token_revoked": "Token has been revoked",
+    "invalid_token": "Invalid or expired access token",
+    "unauthorized": "Unauthorized"
+  }
+}
