@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  FileTypeValidator,
   Get,
+  MaxFileSizeValidator,
+  ParseFilePipe,
   Put,
   Req,
   UploadedFile,
@@ -52,7 +55,16 @@ export class UsersController {
   updateCurrentUser(
     @Req() req: AuthenticatedRequest,
     @Body() dto: UpdateUserDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipe({
+        fileIsRequired: false,
+        validators: [
+          new MaxFileSizeValidator({ maxSize: MAX_FILE_SIZE }),
+          new FileTypeValidator({ fileType: /(jpeg|png|webp)$/i }),
+        ],
+      }),
+    )
+    file?: Express.Multer.File,
   ) {
     return this.usersService.updateUserProfile(req.user.sub, dto, file);
   }

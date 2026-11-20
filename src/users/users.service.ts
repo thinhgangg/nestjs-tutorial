@@ -1,7 +1,7 @@
 import {
   ConflictException,
   Injectable,
-  NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
@@ -46,12 +46,6 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  async updateUser(id: number, data: Partial<User>): Promise<User> {
-    await this.usersRepository.update(id, data);
-    const updatedUser = await this.findById(id);
-    return updatedUser!;
-  }
-
   async updateUserProfile(
     userId: number,
     dto: UpdateUserDto,
@@ -61,9 +55,13 @@ export class UsersService {
     const currentUser = await this.findById(userId);
 
     if (!currentUser) {
-      throw new NotFoundException(
+      throw new UnauthorizedException(
         this.i18n.t('common.auth.unauthorized', { lang }),
       );
+    }
+
+    if (file) {
+      this.attachmentsService.validateAvatar(file);
     }
 
     if (dto.email && dto.email !== currentUser.email) {
@@ -109,27 +107,26 @@ export class UsersService {
     const updatedUser = await this.findById(userId);
     const image = await this.attachmentsService.getAvatarUrl(userId);
 
-    return {
-      user: {
-        id: updatedUser!.id,
-        email: updatedUser!.email,
-        username: updatedUser!.username,
-        bio: updatedUser!.bio,
-        image,
-      },
-    };
+    return this.buildUserResponse(updatedUser!, image);
   }
 
   async getUserProfile(userId: number) {
     const lang = I18nContext.current()?.lang;
     const user = await this.findById(userId);
     if (!user) {
-      throw new NotFoundException(
+      throw new UnauthorizedException(
         this.i18n.t('common.auth.unauthorized', { lang }),
       );
     }
 
     const image = await this.attachmentsService.getAvatarUrl(userId);
+    return this.buildUserResponse(user, image);
+  }
+
+  private buildUserResponse(
+    user: { id: number; email: string; username: string; bio: string | null },
+    image: string | null,
+  ) {
     return {
       user: {
         id: user.id,

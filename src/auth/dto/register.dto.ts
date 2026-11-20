@@ -24,6 +24,9 @@ export class RegisterDto {
   email: string;
 
   @ApiProperty({ example: 'nguyenvana' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(MAX_USERNAME_LENGTH)

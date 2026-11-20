@@ -16,6 +16,7 @@ describe('ProfilesService', () => {
   let usersService: Record<string, jest.Mock>;
   let attachmentsService: Record<string, jest.Mock>;
   let i18nService: Record<string, jest.Mock>;
+  let queryBuilderMock: Record<string, jest.Mock>;
 
   const mockTargetUser = {
     id: 2,
@@ -24,10 +25,17 @@ describe('ProfilesService', () => {
   };
 
   beforeEach(async () => {
+    queryBuilderMock = {
+      insert: jest.fn().mockReturnThis(),
+      into: jest.fn().mockReturnThis(),
+      values: jest.fn().mockReturnThis(),
+      orIgnore: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({}),
+    };
+
     followsRepository = {
       exists: jest.fn(),
-      create: jest.fn((dto) => dto),
-      save: jest.fn((dto) => Promise.resolve(dto)),
+      createQueryBuilder: jest.fn(() => queryBuilderMock),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     usersService = {
@@ -95,12 +103,12 @@ describe('ProfilesService', () => {
 
   it('followUser - should follow target user and return following true', async () => {
     usersService.findByUsername.mockResolvedValue(mockTargetUser);
-    followsRepository.exists.mockResolvedValue(false);
 
     const result = await service.followUser('targetuser', 1);
 
     expect(result.profile.following).toBe(true);
-    expect(followsRepository.save).toHaveBeenCalled();
+    expect(followsRepository.createQueryBuilder).toHaveBeenCalled();
+    expect(queryBuilderMock.execute).toHaveBeenCalled();
   });
 
   it('followUser - should throw BadRequestException if following self', async () => {
@@ -131,4 +139,3 @@ describe('ProfilesService', () => {
     );
   });
 });
-

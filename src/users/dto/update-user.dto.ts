@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsEmail,
+  IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
@@ -27,6 +28,10 @@ export class UpdateUserDto {
 
   @ApiPropertyOptional({ example: 'newusername' })
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsNotEmpty()
   @IsString()
   @MaxLength(MAX_USERNAME_LENGTH)
   username?: string;
@@ -55,4 +60,3 @@ export class UpdateUserDto {
   @IsOptional()
   avatar?: Express.Multer.File;
 }
-

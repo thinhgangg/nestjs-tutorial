@@ -38,15 +38,7 @@ export class ProfilesService {
     }
 
     const image = await this.attachmentsService.getAvatarUrl(user.id);
-
-    return {
-      profile: {
-        username: user.username,
-        bio: user.bio,
-        image,
-        following: isFollowing,
-      },
-    };
+    return this.buildProfileResponse(user, image, isFollowing);
   }
 
   async followUser(username: string, currentUserId: number) {
@@ -65,28 +57,19 @@ export class ProfilesService {
       );
     }
 
-    const isAlreadyFollowing = await this.followsRepository.exists({
-      where: { followerId: currentUserId, followingId: targetUser.id },
-    });
-
-    if (!isAlreadyFollowing) {
-      const follow = this.followsRepository.create({
+    await this.followsRepository
+      .createQueryBuilder()
+      .insert()
+      .into(Follow)
+      .values({
         followerId: currentUserId,
         followingId: targetUser.id,
-      });
-      await this.followsRepository.save(follow);
-    }
+      })
+      .orIgnore()
+      .execute();
 
     const image = await this.attachmentsService.getAvatarUrl(targetUser.id);
-
-    return {
-      profile: {
-        username: targetUser.username,
-        bio: targetUser.bio,
-        image,
-        following: true,
-      },
-    };
+    return this.buildProfileResponse(targetUser, image, true);
   }
 
   async unfollowUser(username: string, currentUserId: number) {
@@ -111,15 +94,21 @@ export class ProfilesService {
     });
 
     const image = await this.attachmentsService.getAvatarUrl(targetUser.id);
+    return this.buildProfileResponse(targetUser, image, false);
+  }
 
+  private buildProfileResponse(
+    user: { username: string; bio: string | null },
+    image: string | null,
+    isFollowing: boolean,
+  ) {
     return {
       profile: {
-        username: targetUser.username,
-        bio: targetUser.bio,
+        username: user.username,
+        bio: user.bio,
         image,
-        following: false,
+        following: isFollowing,
       },
     };
   }
 }
-

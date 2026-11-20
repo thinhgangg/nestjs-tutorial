@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { I18nService } from 'nestjs-i18n';
@@ -29,6 +33,7 @@ describe('UsersService', () => {
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     attachmentsService = {
+      validateAvatar: jest.fn(),
       saveAvatar: jest.fn().mockResolvedValue({ url: '/public/avatars/new.png' }),
       getAvatarUrl: jest.fn().mockResolvedValue('/public/avatars/avatar.png'),
     };
@@ -88,6 +93,27 @@ describe('UsersService', () => {
     ).rejects.toThrow(ConflictException);
   });
 
+  it('updateUserProfile - should validate avatar before updating user in database', async () => {
+    usersRepository.findOne.mockResolvedValue(mockUser);
+    attachmentsService.validateAvatar.mockImplementation(() => {
+      throw new BadRequestException('Invalid avatar');
+    });
+
+    const mockFile = {
+      mimetype: 'application/pdf',
+      size: 1024,
+      originalname: 'test.pdf',
+      buffer: Buffer.from('test'),
+    } as Express.Multer.File;
+
+    await expect(
+      service.updateUserProfile(1, { bio: 'New bio' }, mockFile),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(attachmentsService.validateAvatar).toHaveBeenCalledWith(mockFile);
+    expect(usersRepository.update).not.toHaveBeenCalled();
+  });
+
   it('updateUserProfile - should save avatar if file is provided', async () => {
     usersRepository.findOne.mockResolvedValue(mockUser);
 
@@ -100,6 +126,7 @@ describe('UsersService', () => {
 
     await service.updateUserProfile(1, {}, mockFile);
 
+    expect(attachmentsService.validateAvatar).toHaveBeenCalledWith(mockFile);
     expect(attachmentsService.saveAvatar).toHaveBeenCalledWith(1, mockFile);
   });
 
@@ -112,10 +139,11 @@ describe('UsersService', () => {
     expect(result.user.image).toBe('/public/avatars/avatar.png');
   });
 
-  it('getUserProfile - should throw NotFoundException if user does not exist', async () => {
+  it('getUserProfile - should throw UnauthorizedException if user does not exist', async () => {
     usersRepository.findOne.mockResolvedValue(null);
 
-    await expect(service.getUserProfile(99)).rejects.toThrow(NotFoundException);
+    await expect(service.getUserProfile(99)).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 });
-

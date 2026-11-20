@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
@@ -10,9 +11,11 @@ import * as path from 'path';
 import { Repository } from 'typeorm';
 import {
   ALLOWED_IMAGE_TYPES,
+  ATTACHABLE_TYPE_USER,
   AVATAR_DIR,
   AVATAR_URL_PREFIX,
   MAX_FILE_SIZE,
+  MIME_TO_EXTENSION,
 } from './attachments.constants';
 import { Attachment } from './entities/attachment.entity';
 
@@ -24,14 +27,12 @@ export class AttachmentsService {
     private readonly i18n: I18nService,
   ) {}
 
-  async saveAvatar(
-    userId: number,
-    file: Express.Multer.File,
-  ): Promise<Attachment> {
+  validateAvatar(file: Express.Multer.File): void {
     const lang = I18nContext.current()?.lang;
 
     const isTypeAllowed = ALLOWED_IMAGE_TYPES.includes(file.mimetype);
-    if (!isTypeAllowed) {
+    const isMagicBytesValid = this.checkImageMagicBytes(file.buffer);
+    if (!isTypeAllowed || !isMagicBytesValid) {
       throw new BadRequestException(
         this.i18n.t('common.attachment.invalid_type', { lang }),
       );
@@ -43,51 +44,108 @@ export class AttachmentsService {
         this.i18n.t('common.attachment.file_too_large', { lang }),
       );
     }
+  }
+
+  async saveAvatar(
+    userId: number,
+    file: Express.Multer.File,
+  ): Promise<Attachment> {
+    this.validateAvatar(file);
 
     const uploadDir = path.join(process.cwd(), AVATAR_DIR);
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
 
-    const fileExtension = path.extname(file.originalname).toLowerCase();
+    const fileExtension = MIME_TO_EXTENSION[file.mimetype] || '.png';
     const uniqueFileName = `${randomUUID()}${fileExtension}`;
     const destinationPath = path.join(uploadDir, uniqueFileName);
 
     fs.writeFileSync(destinationPath, file.buffer);
 
     const existingAttachment = await this.attachmentsRepository.findOne({
-      where: { attachableType: 'User', attachableId: userId },
+      where: { attachableType: ATTACHABLE_TYPE_USER, attachableId: userId },
     });
 
-    if (existingAttachment) {
-      this.deletePhysicalFile(existingAttachment.url);
+    const oldUrl = existingAttachment?.url;
 
-      existingAttachment.url = `${AVATAR_URL_PREFIX}/${uniqueFileName}`;
-      existingAttachment.fileName = file.originalname;
-      existingAttachment.fileType = file.mimetype;
-      existingAttachment.fileSize = file.size;
+    try {
+      let savedAttachment: Attachment;
+      if (existingAttachment) {
+        existingAttachment.url = `${AVATAR_URL_PREFIX}/${uniqueFileName}`;
+        existingAttachment.fileName = file.originalname;
+        existingAttachment.fileType = file.mimetype;
+        existingAttachment.fileSize = file.size;
 
-      return this.attachmentsRepository.save(existingAttachment);
+        savedAttachment =
+          await this.attachmentsRepository.save(existingAttachment);
+      } else {
+        const newAttachment = this.attachmentsRepository.create({
+          id: randomUUID(),
+          attachableType: ATTACHABLE_TYPE_USER,
+          attachableId: userId,
+          url: `${AVATAR_URL_PREFIX}/${uniqueFileName}`,
+          fileName: file.originalname,
+          fileType: file.mimetype,
+          fileSize: file.size,
+        });
+
+        savedAttachment = await this.attachmentsRepository.save(newAttachment);
+      }
+
+      if (oldUrl && oldUrl !== savedAttachment.url) {
+        this.deletePhysicalFile(oldUrl);
+      }
+
+      return savedAttachment;
+    } catch {
+      this.deletePhysicalFile(`${AVATAR_URL_PREFIX}/${uniqueFileName}`);
+      throw new InternalServerErrorException(
+        'Failed to save avatar attachment',
+      );
     }
-
-    const newAttachment = this.attachmentsRepository.create({
-      id: randomUUID(),
-      attachableType: 'User',
-      attachableId: userId,
-      url: `${AVATAR_URL_PREFIX}/${uniqueFileName}`,
-      fileName: file.originalname,
-      fileType: file.mimetype,
-      fileSize: file.size,
-    });
-
-    return this.attachmentsRepository.save(newAttachment);
   }
 
   async getAvatarUrl(userId: number): Promise<string | null> {
     const attachment = await this.attachmentsRepository.findOne({
-      where: { attachableType: 'User', attachableId: userId },
+      where: { attachableType: ATTACHABLE_TYPE_USER, attachableId: userId },
     });
     return attachment ? attachment.url : null;
+  }
+
+  private checkImageMagicBytes(buffer?: Buffer): boolean {
+    if (!buffer || buffer.length < 4) {
+      return false;
+    }
+    // JPEG: FF D8 FF
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+      return true;
+    }
+    // PNG: 89 50 4E 47
+    if (
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47
+    ) {
+      return true;
+    }
+    // WebP: RIFF ... WEBP
+    const MIN_WEBP_LENGTH = 12;
+    if (
+      buffer.length >= MIN_WEBP_LENGTH &&
+      buffer[0] === 0x52 &&
+      buffer[1] === 0x49 &&
+      buffer[2] === 0x46 &&
+      buffer[3] === 0x46 &&
+      buffer[8] === 0x57 &&
+      buffer[9] === 0x45 &&
+      buffer[10] === 0x42 &&
+      buffer[11] === 0x50
+    ) {
+      return true;
+    }
+    return false;
   }
 
   private deletePhysicalFile(url: string): void {

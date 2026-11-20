@@ -17,6 +17,7 @@ describe('AuthService', () => {
   beforeEach(async () => {
     usersService = {
       existsByEmail: jest.fn(),
+      existsByUsername: jest.fn(),
       findByEmail: jest.fn(),
       findById: jest.fn(),
       createUser: jest.fn(),
@@ -46,6 +47,7 @@ describe('AuthService', () => {
 
   it('register - should create a new user with lowercase email', async () => {
     usersService.existsByEmail.mockResolvedValue(false);
+    usersService.existsByUsername.mockResolvedValue(false);
     usersService.createUser.mockResolvedValue({
       id: 1,
       email: 'test@example.com',
@@ -61,11 +63,42 @@ describe('AuthService', () => {
 
     expect(result.email).toBe('test@example.com');
     expect(usersService.existsByEmail).toHaveBeenCalledWith('test@example.com');
+    expect(usersService.existsByUsername).toHaveBeenCalledWith('testuser');
     expect(usersService.createUser).toHaveBeenCalled();
   });
 
   it('register - should throw ConflictException if email exists', async () => {
     usersService.existsByEmail.mockResolvedValue(true);
+
+    await expect(
+      service.register({
+        email: 'test@example.com',
+        username: 'testuser',
+        password: 'Password@123456',
+      }),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('register - should throw ConflictException if username exists', async () => {
+    usersService.existsByEmail.mockResolvedValue(false);
+    usersService.existsByUsername.mockResolvedValue(true);
+
+    await expect(
+      service.register({
+        email: 'test@example.com',
+        username: 'testuser',
+        password: 'Password@123456',
+      }),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('register - should catch duplicate key database error (code 23505) and throw ConflictException', async () => {
+    usersService.existsByEmail.mockResolvedValue(false);
+    usersService.existsByUsername.mockResolvedValue(false);
+    const dbError = new Error('duplicate key') as any;
+    dbError.code = '23505';
+    dbError.detail = 'Key (username)=(testuser) already exists.';
+    usersService.createUser.mockRejectedValue(dbError);
 
     await expect(
       service.register({
