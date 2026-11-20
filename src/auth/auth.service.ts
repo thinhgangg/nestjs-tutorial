@@ -32,11 +32,21 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const lang = I18nContext.current()?.lang;
     const normalizedEmail = dto.email.trim().toLowerCase();
+    const normalizedUsername = dto.username.trim();
 
-    const isEmailExists = await this.usersService.existsByEmail(normalizedEmail);
+    const isEmailExists =
+      await this.usersService.existsByEmail(normalizedEmail);
     if (isEmailExists) {
       throw new ConflictException(
         this.i18n.t('common.auth.email_exists', { lang }),
+      );
+    }
+
+    const isUsernameExists =
+      await this.usersService.existsByUsername(normalizedUsername);
+    if (isUsernameExists) {
+      throw new ConflictException(
+        this.i18n.t('common.user.username_exists', { lang }),
       );
     }
 
@@ -44,11 +54,16 @@ export class AuthService {
     const user = await this.usersService
       .createUser({
         email: normalizedEmail,
-        username: dto.username,
+        username: normalizedUsername,
         password: hashedPassword,
       })
-      .catch((error: { code?: string }) => {
+      .catch((error: { code?: string; detail?: string }) => {
         if (error?.code === PG_UNIQUE_VIOLATION) {
+          if (error.detail?.includes('username')) {
+            throw new ConflictException(
+              this.i18n.t('common.user.username_exists', { lang }),
+            );
+          }
           throw new ConflictException(
             this.i18n.t('common.auth.email_exists', { lang }),
           );
@@ -56,12 +71,7 @@ export class AuthService {
         throw new InternalServerErrorException('Failed to create user');
       });
 
-    return {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      createdAt: user.createdAt,
-    };
+    return this.buildAuthUserResponse(user);
   }
 
   async login(dto: LoginDto) {
@@ -108,6 +118,15 @@ export class AuthService {
       );
     }
 
+    return this.buildAuthUserResponse(user);
+  }
+
+  private buildAuthUserResponse(user: {
+    id: number;
+    email: string;
+    username: string;
+    createdAt: Date;
+  }) {
     return {
       id: user.id,
       email: user.email,

@@ -8,5 +8,17 @@
     "token_revoked": "Token has been revoked",
     "invalid_token": "Invalid or expired access token",
     "unauthorized": "Unauthorized"
+  },
+  "user": {
+    "username_exists": "Username already exists"
+  },
+  "attachment": {
+    "invalid_type": "Only image files (JPEG, PNG, WebP) are allowed",
+    "file_too_large": "File size must not exceed 5MB"
+  },
+  "profile": {
+    "not_found": "Profile not found",
+    "cannot_follow_self": "Cannot follow yourself",
+    "cannot_unfollow_self": "Cannot unfollow yourself"
   }
 }

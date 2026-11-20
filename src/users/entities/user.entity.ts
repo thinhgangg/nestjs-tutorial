@@ -14,11 +14,14 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @Column()
+  @Column({ unique: true })
   username: string;
 
   @Column()
   password: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  bio: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
