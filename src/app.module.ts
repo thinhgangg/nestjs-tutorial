@@ -10,6 +10,10 @@ import {
 } from 'nestjs-i18n';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { Attachment } from './attachments/entities/attachment.entity';
+import { ArticleFavorite } from './articles/entities/article-favorite.entity';
+import { Article } from './articles/entities/article.entity';
+import { Tag } from './articles/entities/tag.entity';
+import { ArticlesModule } from './articles/articles.module';
 import { AuthModule } from './auth/auth.module';
 import { HelloModule } from './hello/hello.module';
 import { Follow } from './profiles/entities/follow.entity';
@@ -32,7 +36,7 @@ const DEFAULT_DB_PORT = 5432;
         username: configService.getOrThrow<string>('DB_USERNAME'),
         password: configService.getOrThrow<string>('DB_PASSWORD'),
         database: configService.getOrThrow<string>('DB_NAME'),
-        entities: [User, Follow, Attachment],
+        entities: [User, Follow, Attachment, Article, Tag, ArticleFavorite],
         synchronize: false,
       }),
     }),
@@ -53,6 +57,7 @@ const DEFAULT_DB_PORT = 5432;
     AuthModule,
     AttachmentsModule,
     ProfilesModule,
+    ArticlesModule,
     HelloModule,
   ],
 })

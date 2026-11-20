@@ -20,5 +20,10 @@
     "not_found": "Profile not found",
     "cannot_follow_self": "Cannot follow yourself",
     "cannot_unfollow_self": "Cannot unfollow yourself"
+  },
+  "article": {
+    "not_found": "Article not found",
+    "forbidden": "You are not allowed to modify this article",
+    "deleted": "Article deleted successfully"
   }
 }
