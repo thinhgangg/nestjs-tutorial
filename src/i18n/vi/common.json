@@ -20,5 +20,10 @@
     "not_found": "Không tìm thấy thông tin profile",
     "cannot_follow_self": "Không thể tự follow chính mình",
     "cannot_unfollow_self": "Không thể unfollow chính mình"
+  },
+  "article": {
+    "not_found": "Không tìm thấy bài viết",
+    "forbidden": "Bạn không có quyền chỉnh sửa bài viết này",
+    "deleted": "Xoá bài viết thành công"
   }
 }
