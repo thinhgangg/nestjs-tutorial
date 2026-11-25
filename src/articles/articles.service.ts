@@ -150,6 +150,7 @@ export class ArticlesService {
       .leftJoinAndSelect('article.author', 'author')
       .leftJoinAndSelect('article.tags', 'tag')
       .orderBy('article.createdAt', 'DESC')
+      .addOrderBy('article.id', 'DESC')
       .skip(offset)
       .take(limit);
 
@@ -200,6 +201,7 @@ export class ArticlesService {
         { currentUserId },
       )
       .orderBy('article.createdAt', 'DESC')
+      .addOrderBy('article.id', 'DESC')
       .skip(offset)
       .take(limit);
 
@@ -258,14 +260,21 @@ export class ArticlesService {
       (name) => !existingNames.has(name),
     );
 
-    const createdTags: Tag[] = [];
-    for (const name of missingNames) {
-      const tag = this.tagsRepository.create({ name });
-      const saved = await this.tagsRepository.save(tag);
-      createdTags.push(saved);
+    if (missingNames.length > 0) {
+      await this.tagsRepository
+        .createQueryBuilder()
+        .insert()
+        .into(Tag)
+        .values(missingNames.map((name) => ({ name })))
+        .orIgnore()
+        .execute();
+
+      return this.tagsRepository.find({
+        where: { name: In(normalizedTagNames) },
+      });
     }
 
-    return [...existingTags, ...createdTags];
+    return existingTags;
   }
 
   private generateSlug(title: string): string {
@@ -284,45 +293,35 @@ export class ArticlesService {
     article: Article,
     currentUserId?: number,
   ) {
-    const isFavorited = currentUserId
-      ? await this.favoritesRepository.exists({
-          where: { articleId: article.id, userId: currentUserId },
-        })
-      : false;
-
-    const favoritesCount = await this.favoritesRepository.count({
-      where: { articleId: article.id },
-    });
-
-    const isFollowing = currentUserId
-      ? await this.followsRepository.exists({
-          where: {
-            followerId: currentUserId,
-            followingId: article.author.id,
-          },
-        })
-      : false;
-
-    const image = await this.attachmentsService.getAvatarUrl(article.author.id);
+    const [isFavorited, favoritesCount, isFollowing, image] = await Promise.all(
+      [
+        currentUserId
+          ? this.favoritesRepository.exists({
+              where: { articleId: article.id, userId: currentUserId },
+            })
+          : Promise.resolve(false),
+        this.favoritesRepository.count({
+          where: { articleId: article.id },
+        }),
+        currentUserId
+          ? this.followsRepository.exists({
+              where: {
+                followerId: currentUserId,
+                followingId: article.author.id,
+              },
+            })
+          : Promise.resolve(false),
+        this.attachmentsService.getAvatarUrl(article.author.id),
+      ],
+    );
 
     return {
-      article: {
-        slug: article.slug,
-        title: article.title,
-        description: article.description,
-        body: article.body,
-        tagList: article.tags ? article.tags.map((tag) => tag.name) : [],
-        createdAt: article.createdAt,
-        updatedAt: article.updatedAt,
+      article: this.formatArticlePayload(article, {
         favorited: isFavorited,
         favoritesCount,
-        author: {
-          username: article.author.username,
-          bio: article.author.bio,
-          image,
-          following: isFollowing,
-        },
-      },
+        following: isFollowing,
+        image,
+      }),
     };
   }
 
@@ -331,16 +330,104 @@ export class ArticlesService {
     articlesCount: number,
     currentUserId?: number,
   ) {
-    const articleList = await Promise.all(
-      articles.map(async (article) => {
-        const item = await this.buildArticleResponse(article, currentUserId);
-        return item.article;
+    if (articles.length === 0) {
+      return {
+        articles: [],
+        articlesCount,
+      };
+    }
+
+    const articleIds = [...new Set(articles.map((article) => article.id))];
+    const authorIds = [
+      ...new Set(articles.map((article) => article.author.id)),
+    ];
+
+    const [favoriteCountRows, userFavorites, userFollows, avatarUrlMap] =
+      await Promise.all([
+        this.favoritesRepository
+          .createQueryBuilder('favorite')
+          .select('favorite.articleId', 'articleId')
+          .addSelect('COUNT(*)', 'count')
+          .where('favorite.articleId IN (:...articleIds)', { articleIds })
+          .groupBy('favorite.articleId')
+          .getRawMany<{
+            articleId: number | string;
+            count: string | number;
+          }>(),
+        currentUserId
+          ? this.favoritesRepository.find({
+              select: { articleId: true },
+              where: {
+                userId: currentUserId,
+                articleId: In(articleIds),
+              },
+            })
+          : Promise.resolve([]),
+        currentUserId
+          ? this.followsRepository.find({
+              select: { followingId: true },
+              where: {
+                followerId: currentUserId,
+                followingId: In(authorIds),
+              },
+            })
+          : Promise.resolve([]),
+        this.attachmentsService.getAvatarUrls(authorIds),
+      ]);
+
+    const favoritesCountMap = new Map<number, number>(
+      favoriteCountRows.map((row) => [
+        Number(row.articleId),
+        Number(row.count),
+      ]),
+    );
+    const favoritedArticleIds = new Set(
+      userFavorites.map((favorite) => favorite.articleId),
+    );
+    const followingAuthorIds = new Set(
+      userFollows.map((follow) => follow.followingId),
+    );
+
+    const articleList = articles.map((article) =>
+      this.formatArticlePayload(article, {
+        favorited: favoritedArticleIds.has(article.id),
+        favoritesCount: favoritesCountMap.get(article.id) ?? 0,
+        following: followingAuthorIds.has(article.author.id),
+        image: avatarUrlMap.get(article.author.id) ?? null,
       }),
     );
 
     return {
       articles: articleList,
       articlesCount,
+    };
+  }
+
+  private formatArticlePayload(
+    article: Article,
+    meta: {
+      favorited: boolean;
+      favoritesCount: number;
+      following: boolean;
+      image: string | null;
+    },
+  ) {
+    return {
+      slug: article.slug,
+      title: article.title,
+      description: article.description,
+      body: article.body,
+      tagList: article.tags ? article.tags.map((tag) => tag.name) : [],
+      createdAt: article.createdAt,
+      updatedAt: article.updatedAt,
+      favorited: meta.favorited,
+      favoritesCount: meta.favoritesCount,
+      author: {
+        username: article.author.username,
+        bio: article.author.bio,
+        image: meta.image,
+        following: meta.following,
+      },
     };
   }
 }

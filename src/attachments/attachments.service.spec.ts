@@ -32,6 +32,7 @@ describe('AttachmentsService', () => {
   beforeEach(async () => {
     attachmentsRepository = {
       findOne: jest.fn(),
+      find: jest.fn(),
       create: jest.fn((dto) => dto),
       save: jest.fn((entity) =>
         Promise.resolve({ id: 'mock-uuid', ...entity }),
@@ -176,6 +177,28 @@ describe('AttachmentsService', () => {
 
       const url = await service.getAvatarUrl(99);
       expect(url).toBeNull();
+    });
+  });
+
+  describe('getAvatarUrls', () => {
+    it('should return empty map without querying when userIds is empty', async () => {
+      const map = await service.getAvatarUrls([]);
+
+      expect(map.size).toBe(0);
+      expect(attachmentsRepository.find).not.toHaveBeenCalled();
+    });
+
+    it('should return a map of userId to avatar url', async () => {
+      attachmentsRepository.find.mockResolvedValue([
+        { attachableId: 1, url: '/public/avatars/a1.png' },
+        { attachableId: 2, url: '/public/avatars/a2.png' },
+      ]);
+
+      const map = await service.getAvatarUrls([1, 2, 1]);
+
+      expect(attachmentsRepository.find).toHaveBeenCalledTimes(1);
+      expect(map.get(1)).toBe('/public/avatars/a1.png');
+      expect(map.get(2)).toBe('/public/avatars/a2.png');
     });
   });
 });
