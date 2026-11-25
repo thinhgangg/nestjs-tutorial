@@ -25,5 +25,10 @@
     "not_found": "Article not found",
     "forbidden": "You are not allowed to modify this article",
     "deleted": "Article deleted successfully"
+  },
+  "comment": {
+    "not_found": "Comment not found",
+    "forbidden": "You are not allowed to delete this comment",
+    "deleted": "Comment deleted successfully"
   }
 }
