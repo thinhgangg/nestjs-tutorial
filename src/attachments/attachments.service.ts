@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import { I18nContext, I18nService } from 'nestjs-i18n';
 import * as path from 'path';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   ALLOWED_IMAGE_TYPES,
   ATTACHABLE_TYPE_USER,
@@ -111,6 +111,27 @@ export class AttachmentsService {
       where: { attachableType: ATTACHABLE_TYPE_USER, attachableId: userId },
     });
     return attachment ? attachment.url : null;
+  }
+
+  async getAvatarUrls(userIds: number[]): Promise<Map<number, string>> {
+    if (userIds.length === 0) {
+      return new Map();
+    }
+
+    const uniqueUserIds = [...new Set(userIds)];
+    const attachments = await this.attachmentsRepository.find({
+      where: {
+        attachableType: ATTACHABLE_TYPE_USER,
+        attachableId: In(uniqueUserIds),
+      },
+    });
+
+    return new Map(
+      attachments.map((attachment) => [
+        attachment.attachableId,
+        attachment.url,
+      ]),
+    );
   }
 
   private checkImageMagicBytes(buffer?: Buffer): boolean {
