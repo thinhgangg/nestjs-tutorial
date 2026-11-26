@@ -5,9 +5,9 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { I18nService } from 'nestjs-i18n';
 import { Article } from '../articles/entities/article.entity';
-import { AttachmentsService } from '../attachments/attachments.service';
-import { Follow } from '../profiles/entities/follow.entity';
+import { ProfilesService } from '../profiles/profiles.service';
 import { User } from '../users/entities/user.entity';
+import { COMMENT_BODY_MAX_LENGTH } from './comments.constants';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { Comment } from './entities/comment.entity';
@@ -16,9 +16,8 @@ describe('CommentsService', () => {
   let service: CommentsService;
   let commentsRepository: Record<string, jest.Mock>;
   let articlesRepository: Record<string, jest.Mock>;
-  let followsRepository: Record<string, jest.Mock>;
   let usersRepository: Record<string, jest.Mock>;
-  let attachmentsService: Record<string, jest.Mock>;
+  let profilesService: Record<string, jest.Mock>;
   let i18nService: Record<string, jest.Mock>;
 
   const mockUser: User = {
@@ -82,19 +81,30 @@ describe('CommentsService', () => {
       findOne: jest.fn().mockResolvedValue(mockArticle),
     };
 
-    followsRepository = {
-      find: jest.fn().mockResolvedValue([]),
-    };
-
     usersRepository = {
       findOne: jest.fn().mockResolvedValue(mockUser),
     };
 
-    attachmentsService = {
-      getAvatarUrl: jest.fn().mockResolvedValue('/public/avatars/john.png'),
-      getAvatarUrls: jest
-        .fn()
-        .mockResolvedValue(new Map([[1, '/public/avatars/john.png']])),
+    profilesService = {
+      buildAuthorProfile: jest.fn().mockResolvedValue({
+        username: 'john',
+        bio: 'Author bio',
+        image: '/public/avatars/john.png',
+        following: false,
+      }),
+      buildAuthorProfiles: jest.fn().mockResolvedValue(
+        new Map([
+          [
+            1,
+            {
+              username: 'john',
+              bio: 'Author bio',
+              image: '/public/avatars/john.png',
+              following: false,
+            },
+          ],
+        ]),
+      ),
     };
 
     i18nService = {
@@ -113,16 +123,12 @@ describe('CommentsService', () => {
           useValue: articlesRepository,
         },
         {
-          provide: getRepositoryToken(Follow),
-          useValue: followsRepository,
-        },
-        {
           provide: getRepositoryToken(User),
           useValue: usersRepository,
         },
         {
-          provide: AttachmentsService,
-          useValue: attachmentsService,
+          provide: ProfilesService,
+          useValue: profilesService,
         },
         {
           provide: I18nService,
@@ -173,7 +179,7 @@ describe('CommentsService', () => {
   });
 
   describe('getComments', () => {
-    it('should return comments with batch-loaded following status and avatars', async () => {
+    it('should return comments with batch-loaded author profiles via ProfilesService', async () => {
       const secondComment: Comment = {
         ...mockComment,
         id: 101,
@@ -182,9 +188,27 @@ describe('CommentsService', () => {
         author: mockSecondUser,
       };
       commentsRepository.find.mockResolvedValue([mockComment, secondComment]);
-      followsRepository.find.mockResolvedValue([{ followingId: 2 }]);
-      attachmentsService.getAvatarUrls.mockResolvedValue(
-        new Map([[1, '/public/avatars/john.png']]),
+      profilesService.buildAuthorProfiles.mockResolvedValue(
+        new Map([
+          [
+            1,
+            {
+              username: 'john',
+              bio: 'Author bio',
+              image: '/public/avatars/john.png',
+              following: false,
+            },
+          ],
+          [
+            2,
+            {
+              username: 'jane',
+              bio: 'Author bio',
+              image: null,
+              following: true,
+            },
+          ],
+        ]),
       );
 
       const result = await service.getComments(mockArticle.slug, 99);
@@ -208,26 +232,19 @@ describe('CommentsService', () => {
           following: true,
         },
       });
-      expect(attachmentsService.getAvatarUrls).toHaveBeenCalledWith([1, 2]);
-      expect(followsRepository.find).toHaveBeenCalledTimes(1);
+      expect(profilesService.buildAuthorProfiles).toHaveBeenCalledWith(
+        [mockUser, mockSecondUser],
+        99,
+      );
     });
 
-    it('should skip follows lookup when user is unauthenticated', async () => {
-      const result = await service.getComments(mockArticle.slug);
-
-      expect(result.comments).toHaveLength(1);
-      expect(result.comments[0].author.following).toBe(false);
-      expect(followsRepository.find).not.toHaveBeenCalled();
-    });
-
-    it('should return empty array without batch queries when article has no comments', async () => {
+    it('should return empty array without querying profiles when article has no comments', async () => {
       commentsRepository.find.mockResolvedValue([]);
 
       const result = await service.getComments(mockArticle.slug, 1);
 
       expect(result).toEqual({ comments: [] });
-      expect(followsRepository.find).not.toHaveBeenCalled();
-      expect(attachmentsService.getAvatarUrls).not.toHaveBeenCalled();
+      expect(profilesService.buildAuthorProfiles).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException if article does not exist', async () => {
@@ -278,10 +295,16 @@ describe('CommentsService', () => {
   });
 
   describe('CreateCommentDto validation', () => {
-    it('should reject empty body and missing comment wrapper, and accept trimmed body', async () => {
+    it('should reject empty body, missing wrapper, and body exceeding max length', async () => {
       const missingWrapper = plainToInstance(CreateCommentDto, {});
       const emptyBody = plainToInstance(CreateCommentDto, {
         comment: { body: '   ' },
+      });
+      const tooLongBody = plainToInstance(CreateCommentDto, {
+        comment: { body: 'a'.repeat(COMMENT_BODY_MAX_LENGTH + 1) },
+      });
+      const maxLengthBody = plainToInstance(CreateCommentDto, {
+        comment: { body: 'a'.repeat(COMMENT_BODY_MAX_LENGTH) },
       });
       const validDto = plainToInstance(CreateCommentDto, {
         comment: { body: '  Hello world  ' },
@@ -289,6 +312,8 @@ describe('CommentsService', () => {
 
       expect((await validate(missingWrapper)).length).toBeGreaterThan(0);
       expect((await validate(emptyBody)).length).toBeGreaterThan(0);
+      expect((await validate(tooLongBody)).length).toBeGreaterThan(0);
+      expect(await validate(maxLengthBody)).toHaveLength(0);
       expect(await validate(validDto)).toHaveLength(0);
       expect(validDto.comment.body).toBe('Hello world');
     });

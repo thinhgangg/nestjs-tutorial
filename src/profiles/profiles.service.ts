@@ -5,10 +5,23 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { I18nContext, I18nService } from 'nestjs-i18n';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { UsersService } from '../users/users.service';
 import { Follow } from './entities/follow.entity';
+
+export interface AuthorUser {
+  id: number;
+  username: string;
+  bio: string | null;
+}
+
+export interface AuthorProfile {
+  username: string;
+  bio: string | null;
+  image: string | null;
+  following: boolean;
+}
 
 @Injectable()
 export class ProfilesService {
@@ -97,18 +110,88 @@ export class ProfilesService {
     return this.buildProfileResponse(targetUser, image, false);
   }
 
+  async buildAuthorProfile(
+    author: AuthorUser,
+    currentUserId?: number,
+  ): Promise<AuthorProfile> {
+    const [isFollowing, image] = await Promise.all([
+      currentUserId && currentUserId !== author.id
+        ? this.followsRepository.exists({
+            where: { followerId: currentUserId, followingId: author.id },
+          })
+        : Promise.resolve(false),
+      this.attachmentsService.getAvatarUrl(author.id),
+    ]);
+
+    return this.formatAuthorProfile(author, image, isFollowing);
+  }
+
+  async buildAuthorProfiles(
+    authors: AuthorUser[],
+    currentUserId?: number,
+  ): Promise<Map<number, AuthorProfile>> {
+    if (authors.length === 0) {
+      return new Map();
+    }
+
+    const uniqueAuthors = new Map<number, AuthorUser>();
+    for (const author of authors) {
+      uniqueAuthors.set(author.id, author);
+    }
+    const authorIds = [...uniqueAuthors.keys()];
+
+    const [userFollows, avatarUrlMap] = await Promise.all([
+      currentUserId
+        ? this.followsRepository.find({
+            select: { followingId: true },
+            where: {
+              followerId: currentUserId,
+              followingId: In(authorIds),
+            },
+          })
+        : Promise.resolve([]),
+      this.attachmentsService.getAvatarUrls(authorIds),
+    ]);
+
+    const followingAuthorIds = new Set(
+      userFollows.map((follow) => follow.followingId),
+    );
+
+    const profileMap = new Map<number, AuthorProfile>();
+    for (const [authorId, author] of uniqueAuthors) {
+      profileMap.set(
+        authorId,
+        this.formatAuthorProfile(
+          author,
+          avatarUrlMap.get(authorId) ?? null,
+          followingAuthorIds.has(authorId),
+        ),
+      );
+    }
+
+    return profileMap;
+  }
+
+  private formatAuthorProfile(
+    user: { username: string; bio: string | null },
+    image: string | null,
+    isFollowing: boolean,
+  ): AuthorProfile {
+    return {
+      username: user.username,
+      bio: user.bio,
+      image,
+      following: isFollowing,
+    };
+  }
+
   private buildProfileResponse(
     user: { username: string; bio: string | null },
     image: string | null,
     isFollowing: boolean,
   ) {
     return {
-      profile: {
-        username: user.username,
-        bio: user.bio,
-        image,
-        following: isFollowing,
-      },
+      profile: this.formatAuthorProfile(user, image, isFollowing),
     };
   }
 }

@@ -5,10 +5,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { I18nContext, I18nService } from 'nestjs-i18n';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Article } from '../articles/entities/article.entity';
-import { AttachmentsService } from '../attachments/attachments.service';
-import { Follow } from '../profiles/entities/follow.entity';
+import {
+  AuthorProfile,
+  ProfilesService,
+} from '../profiles/profiles.service';
 import { User } from '../users/entities/user.entity';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { Comment } from './entities/comment.entity';
@@ -20,11 +22,9 @@ export class CommentsService {
     private readonly commentsRepository: Repository<Comment>,
     @InjectRepository(Article)
     private readonly articlesRepository: Repository<Article>,
-    @InjectRepository(Follow)
-    private readonly followsRepository: Repository<Follow>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
-    private readonly attachmentsService: AttachmentsService,
+    private readonly profilesService: ProfilesService,
     private readonly i18n: I18nService,
   ) {}
 
@@ -53,13 +53,13 @@ export class CommentsService {
     });
 
     const savedComment = await this.commentsRepository.save(newComment);
-    const image = await this.attachmentsService.getAvatarUrl(currentUserId);
+    const authorProfile = await this.profilesService.buildAuthorProfile(
+      author,
+      currentUserId,
+    );
 
     return {
-      comment: this.formatCommentPayload(savedComment, {
-        image,
-        isFollowing: false,
-      }),
+      comment: this.formatCommentPayload(savedComment, authorProfile),
     };
   }
 
@@ -76,30 +76,17 @@ export class CommentsService {
       return { comments: [] };
     }
 
-    const authorIds = [...new Set(comments.map((comment) => comment.authorId))];
-    const [userFollows, avatarUrlMap] = await Promise.all([
-      currentUserId
-        ? this.followsRepository.find({
-            select: { followingId: true },
-            where: {
-              followerId: currentUserId,
-              followingId: In(authorIds),
-            },
-          })
-        : Promise.resolve([]),
-      this.attachmentsService.getAvatarUrls(authorIds),
-    ]);
-
-    const followingAuthorIds = new Set(
-      userFollows.map((follow) => follow.followingId),
+    const authorProfiles = await this.profilesService.buildAuthorProfiles(
+      comments.map((comment) => comment.author),
+      currentUserId,
     );
 
     return {
       comments: comments.map((comment) =>
-        this.formatCommentPayload(comment, {
-          image: avatarUrlMap.get(comment.authorId) ?? null,
-          isFollowing: followingAuthorIds.has(comment.authorId),
-        }),
+        this.formatCommentPayload(
+          comment,
+          authorProfiles.get(comment.authorId)!,
+        ),
       ),
     };
   }
@@ -145,21 +132,13 @@ export class CommentsService {
     return article;
   }
 
-  private formatCommentPayload(
-    comment: Comment,
-    meta: { image: string | null; isFollowing: boolean },
-  ) {
+  private formatCommentPayload(comment: Comment, author: AuthorProfile) {
     return {
       id: comment.id,
       createdAt: comment.createdAt,
       updatedAt: comment.updatedAt,
       body: comment.body,
-      author: {
-        username: comment.author.username,
-        bio: comment.author.bio,
-        image: meta.image,
-        following: meta.isFollowing,
-      },
+      author,
     };
   }
 }

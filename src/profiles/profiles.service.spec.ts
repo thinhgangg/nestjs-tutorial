@@ -35,6 +35,7 @@ describe('ProfilesService', () => {
 
     followsRepository = {
       exists: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       createQueryBuilder: jest.fn(() => queryBuilderMock),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
@@ -43,6 +44,7 @@ describe('ProfilesService', () => {
     };
     attachmentsService = {
       getAvatarUrl: jest.fn().mockResolvedValue('/public/avatars/avatar.png'),
+      getAvatarUrls: jest.fn().mockResolvedValue(new Map()),
     };
     i18nService = {
       t: jest.fn((key: string) => key),
@@ -137,5 +139,75 @@ describe('ProfilesService', () => {
     await expect(service.unfollowUser('myself', 1)).rejects.toThrow(
       BadRequestException,
     );
+  });
+
+  describe('buildAuthorProfile', () => {
+    it('should build single author profile with following status and avatar', async () => {
+      followsRepository.exists.mockResolvedValue(true);
+
+      const profile = await service.buildAuthorProfile(mockTargetUser, 1);
+
+      expect(profile).toEqual({
+        username: 'targetuser',
+        bio: 'Target bio',
+        image: '/public/avatars/avatar.png',
+        following: true,
+      });
+    });
+
+    it('should skip follows lookup when currentUserId matches author id', async () => {
+      const profile = await service.buildAuthorProfile(mockTargetUser, 2);
+
+      expect(profile.following).toBe(false);
+      expect(followsRepository.exists).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('buildAuthorProfiles', () => {
+    it('should return empty map without querying when authors list is empty', async () => {
+      const result = await service.buildAuthorProfiles([], 1);
+
+      expect(result.size).toBe(0);
+      expect(followsRepository.find).not.toHaveBeenCalled();
+      expect(attachmentsService.getAvatarUrls).not.toHaveBeenCalled();
+    });
+
+    it('should batch load following status and avatars for unique authors', async () => {
+      const firstAuthor = { id: 1, username: 'john', bio: 'John bio' };
+      const secondAuthor = { id: 2, username: 'jane', bio: null };
+      followsRepository.find.mockResolvedValue([{ followingId: 2 }]);
+      attachmentsService.getAvatarUrls.mockResolvedValue(
+        new Map([[1, '/public/avatars/john.png']]),
+      );
+
+      const result = await service.buildAuthorProfiles(
+        [firstAuthor, secondAuthor, firstAuthor],
+        99,
+      );
+
+      expect(result.get(1)).toEqual({
+        username: 'john',
+        bio: 'John bio',
+        image: '/public/avatars/john.png',
+        following: false,
+      });
+      expect(result.get(2)).toEqual({
+        username: 'jane',
+        bio: null,
+        image: null,
+        following: true,
+      });
+      expect(attachmentsService.getAvatarUrls).toHaveBeenCalledWith([1, 2]);
+      expect(followsRepository.find).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip follows lookup when currentUserId is undefined', async () => {
+      attachmentsService.getAvatarUrls.mockResolvedValue(new Map());
+
+      const result = await service.buildAuthorProfiles([mockTargetUser]);
+
+      expect(result.get(2)?.following).toBe(false);
+      expect(followsRepository.find).not.toHaveBeenCalled();
+    });
   });
 });
