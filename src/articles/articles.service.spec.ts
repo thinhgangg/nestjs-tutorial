@@ -4,8 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { I18nService } from 'nestjs-i18n';
-import { AttachmentsService } from '../attachments/attachments.service';
-import { Follow } from '../profiles/entities/follow.entity';
+import { ProfilesService } from '../profiles/profiles.service';
 import { User } from '../users/entities/user.entity';
 import { MAX_PAGE_LIMIT } from './articles.constants';
 import { ArticlesService } from './articles.service';
@@ -20,9 +19,8 @@ describe('ArticlesService', () => {
   let articlesRepository: Record<string, jest.Mock>;
   let tagsRepository: Record<string, jest.Mock>;
   let favoritesRepository: Record<string, jest.Mock>;
-  let followsRepository: Record<string, jest.Mock>;
   let usersRepository: Record<string, jest.Mock>;
-  let attachmentsService: Record<string, jest.Mock>;
+  let profilesService: Record<string, jest.Mock>;
   let i18nService: Record<string, jest.Mock>;
   let queryBuilderMock: Record<string, jest.Mock>;
   let tagQueryBuilderMock: Record<string, jest.Mock>;
@@ -105,20 +103,30 @@ describe('ArticlesService', () => {
       createQueryBuilder: jest.fn(() => favoriteQueryBuilderMock),
     };
 
-    followsRepository = {
-      exists: jest.fn().mockResolvedValue(false),
-      find: jest.fn().mockResolvedValue([]),
-    };
-
     usersRepository = {
       findOne: jest.fn().mockResolvedValue(mockAuthor),
     };
 
-    attachmentsService = {
-      getAvatarUrl: jest.fn().mockResolvedValue('/public/avatars/avatar.png'),
-      getAvatarUrls: jest
-        .fn()
-        .mockResolvedValue(new Map([[1, '/public/avatars/avatar.png']])),
+    profilesService = {
+      buildAuthorProfile: jest.fn().mockResolvedValue({
+        username: 'john',
+        bio: 'Author bio',
+        image: '/public/avatars/avatar.png',
+        following: false,
+      }),
+      buildAuthorProfiles: jest.fn().mockResolvedValue(
+        new Map([
+          [
+            1,
+            {
+              username: 'john',
+              bio: 'Author bio',
+              image: '/public/avatars/avatar.png',
+              following: false,
+            },
+          ],
+        ]),
+      ),
     };
 
     i18nService = {
@@ -141,16 +149,12 @@ describe('ArticlesService', () => {
           useValue: favoritesRepository,
         },
         {
-          provide: getRepositoryToken(Follow),
-          useValue: followsRepository,
-        },
-        {
           provide: getRepositoryToken(User),
           useValue: usersRepository,
         },
         {
-          provide: AttachmentsService,
-          useValue: attachmentsService,
+          provide: ProfilesService,
+          useValue: profilesService,
         },
         {
           provide: I18nService,
@@ -200,7 +204,12 @@ describe('ArticlesService', () => {
       articlesRepository.findOne.mockResolvedValue(mockArticle);
       favoritesRepository.exists.mockResolvedValue(true);
       favoritesRepository.count.mockResolvedValue(5);
-      followsRepository.exists.mockResolvedValue(true);
+      profilesService.buildAuthorProfile.mockResolvedValue({
+        username: 'john',
+        bio: 'Author bio',
+        image: '/public/avatars/avatar.png',
+        following: true,
+      });
 
       const result = await service.getArticleBySlug(
         'my-first-post-12345678',
@@ -359,9 +368,27 @@ describe('ArticlesService', () => {
         { articleId: '10', count: '3' },
       ]);
       favoritesRepository.find.mockResolvedValue([{ articleId: 11 }]);
-      followsRepository.find.mockResolvedValue([{ followingId: 2 }]);
-      attachmentsService.getAvatarUrls.mockResolvedValue(
-        new Map([[1, '/public/avatars/john.png']]),
+      profilesService.buildAuthorProfiles.mockResolvedValue(
+        new Map([
+          [
+            1,
+            {
+              username: 'john',
+              bio: 'Author bio',
+              image: '/public/avatars/john.png',
+              following: false,
+            },
+          ],
+          [
+            2,
+            {
+              username: 'jane',
+              bio: 'Author bio',
+              image: null,
+              following: true,
+            },
+          ],
+        ]),
       );
 
       const result = await service.listArticles({}, 99);
@@ -387,10 +414,12 @@ describe('ArticlesService', () => {
           following: true,
         },
       });
-      expect(attachmentsService.getAvatarUrls).toHaveBeenCalledWith([1, 2]);
+      expect(profilesService.buildAuthorProfiles).toHaveBeenCalledWith(
+        [mockAuthor, secondAuthor],
+        99,
+      );
       expect(favoritesRepository.exists).not.toHaveBeenCalled();
       expect(favoritesRepository.count).not.toHaveBeenCalled();
-      expect(followsRepository.exists).not.toHaveBeenCalled();
     });
 
     it('should return empty list without batch queries when no articles match', async () => {
@@ -400,7 +429,7 @@ describe('ArticlesService', () => {
 
       expect(result).toEqual({ articles: [], articlesCount: 0 });
       expect(favoritesRepository.createQueryBuilder).not.toHaveBeenCalled();
-      expect(attachmentsService.getAvatarUrls).not.toHaveBeenCalled();
+      expect(profilesService.buildAuthorProfiles).not.toHaveBeenCalled();
     });
   });
 

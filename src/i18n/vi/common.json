@@ -25,5 +25,10 @@
     "not_found": "Không tìm thấy bài viết",
     "forbidden": "Bạn không có quyền chỉnh sửa bài viết này",
     "deleted": "Xoá bài viết thành công"
+  },
+  "comment": {
+    "not_found": "Không tìm thấy bình luận",
+    "forbidden": "Bạn không có quyền xoá bình luận này",
+    "deleted": "Xoá bình luận thành công"
   }
 }

@@ -7,8 +7,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { I18nContext, I18nService } from 'nestjs-i18n';
 import { In, Repository } from 'typeorm';
-import { AttachmentsService } from '../attachments/attachments.service';
 import { Follow } from '../profiles/entities/follow.entity';
+import {
+  AuthorProfile,
+  ProfilesService,
+} from '../profiles/profiles.service';
 import { User } from '../users/entities/user.entity';
 import {
   DEFAULT_PAGE_LIMIT,
@@ -32,11 +35,9 @@ export class ArticlesService {
     private readonly tagsRepository: Repository<Tag>,
     @InjectRepository(ArticleFavorite)
     private readonly favoritesRepository: Repository<ArticleFavorite>,
-    @InjectRepository(Follow)
-    private readonly followsRepository: Repository<Follow>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
-    private readonly attachmentsService: AttachmentsService,
+    private readonly profilesService: ProfilesService,
     private readonly i18n: I18nService,
   ) {}
 
@@ -293,34 +294,23 @@ export class ArticlesService {
     article: Article,
     currentUserId?: number,
   ) {
-    const [isFavorited, favoritesCount, isFollowing, image] = await Promise.all(
-      [
-        currentUserId
-          ? this.favoritesRepository.exists({
-              where: { articleId: article.id, userId: currentUserId },
-            })
-          : Promise.resolve(false),
-        this.favoritesRepository.count({
-          where: { articleId: article.id },
-        }),
-        currentUserId
-          ? this.followsRepository.exists({
-              where: {
-                followerId: currentUserId,
-                followingId: article.author.id,
-              },
-            })
-          : Promise.resolve(false),
-        this.attachmentsService.getAvatarUrl(article.author.id),
-      ],
-    );
+    const [isFavorited, favoritesCount, authorProfile] = await Promise.all([
+      currentUserId
+        ? this.favoritesRepository.exists({
+            where: { articleId: article.id, userId: currentUserId },
+          })
+        : Promise.resolve(false),
+      this.favoritesRepository.count({
+        where: { articleId: article.id },
+      }),
+      this.profilesService.buildAuthorProfile(article.author, currentUserId),
+    ]);
 
     return {
       article: this.formatArticlePayload(article, {
         favorited: isFavorited,
         favoritesCount,
-        following: isFollowing,
-        image,
+        author: authorProfile,
       }),
     };
   }
@@ -338,11 +328,8 @@ export class ArticlesService {
     }
 
     const articleIds = [...new Set(articles.map((article) => article.id))];
-    const authorIds = [
-      ...new Set(articles.map((article) => article.author.id)),
-    ];
 
-    const [favoriteCountRows, userFavorites, userFollows, avatarUrlMap] =
+    const [favoriteCountRows, userFavorites, authorProfiles] =
       await Promise.all([
         this.favoritesRepository
           .createQueryBuilder('favorite')
@@ -363,16 +350,10 @@ export class ArticlesService {
               },
             })
           : Promise.resolve([]),
-        currentUserId
-          ? this.followsRepository.find({
-              select: { followingId: true },
-              where: {
-                followerId: currentUserId,
-                followingId: In(authorIds),
-              },
-            })
-          : Promise.resolve([]),
-        this.attachmentsService.getAvatarUrls(authorIds),
+        this.profilesService.buildAuthorProfiles(
+          articles.map((article) => article.author),
+          currentUserId,
+        ),
       ]);
 
     const favoritesCountMap = new Map<number, number>(
@@ -384,16 +365,12 @@ export class ArticlesService {
     const favoritedArticleIds = new Set(
       userFavorites.map((favorite) => favorite.articleId),
     );
-    const followingAuthorIds = new Set(
-      userFollows.map((follow) => follow.followingId),
-    );
 
     const articleList = articles.map((article) =>
       this.formatArticlePayload(article, {
         favorited: favoritedArticleIds.has(article.id),
         favoritesCount: favoritesCountMap.get(article.id) ?? 0,
-        following: followingAuthorIds.has(article.author.id),
-        image: avatarUrlMap.get(article.author.id) ?? null,
+        author: authorProfiles.get(article.author.id)!,
       }),
     );
 
@@ -408,8 +385,7 @@ export class ArticlesService {
     meta: {
       favorited: boolean;
       favoritesCount: number;
-      following: boolean;
-      image: string | null;
+      author: AuthorProfile;
     },
   ) {
     return {
@@ -422,12 +398,7 @@ export class ArticlesService {
       updatedAt: article.updatedAt,
       favorited: meta.favorited,
       favoritesCount: meta.favoritesCount,
-      author: {
-        username: article.author.username,
-        bio: article.author.bio,
-        image: meta.image,
-        following: meta.following,
-      },
+      author: meta.author,
     };
   }
 }

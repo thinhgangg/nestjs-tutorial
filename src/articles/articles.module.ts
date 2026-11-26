@@ -1,8 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AttachmentsModule } from '../attachments/attachments.module';
 import { AuthModule } from '../auth/auth.module';
-import { Follow } from '../profiles/entities/follow.entity';
+import { ProfilesModule } from '../profiles/profiles.module';
 import { User } from '../users/entities/user.entity';
 import { ArticlesController } from './articles.controller';
 import { ArticlesService } from './articles.service';
@@ -13,8 +12,8 @@ import { TagsController } from './tags.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Article, Tag, ArticleFavorite, Follow, User]),
-    AttachmentsModule,
+    TypeOrmModule.forFeature([Article, Tag, ArticleFavorite, User]),
+    ProfilesModule,
     AuthModule,
   ],
   controllers: [ArticlesController, TagsController],

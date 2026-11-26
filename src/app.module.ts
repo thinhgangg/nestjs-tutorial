@@ -15,6 +15,8 @@ import { Article } from './articles/entities/article.entity';
 import { Tag } from './articles/entities/tag.entity';
 import { ArticlesModule } from './articles/articles.module';
 import { AuthModule } from './auth/auth.module';
+import { CommentsModule } from './comments/comments.module';
+import { Comment } from './comments/entities/comment.entity';
 import { HelloModule } from './hello/hello.module';
 import { Follow } from './profiles/entities/follow.entity';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -36,7 +38,15 @@ const DEFAULT_DB_PORT = 5432;
         username: configService.getOrThrow<string>('DB_USERNAME'),
         password: configService.getOrThrow<string>('DB_PASSWORD'),
         database: configService.getOrThrow<string>('DB_NAME'),
-        entities: [User, Follow, Attachment, Article, Tag, ArticleFavorite],
+        entities: [
+          User,
+          Follow,
+          Attachment,
+          Article,
+          Tag,
+          ArticleFavorite,
+          Comment,
+        ],
         synchronize: false,
       }),
     }),
@@ -58,6 +68,7 @@ const DEFAULT_DB_PORT = 5432;
     AttachmentsModule,
     ProfilesModule,
     ArticlesModule,
+    CommentsModule,
     HelloModule,
   ],
 })
