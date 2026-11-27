@@ -1,42 +1,44 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { createTestApp, E2eTestContext } from './helpers/test-app.helper';
+import {
+  clearTestRedis,
+  truncateDatabase,
+} from './helpers/test-database.helper';
 
 describe('HelloController (e2e)', () => {
-  let app: INestApplication<App>;
+  let ctx: E2eTestContext;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api');
-    await app.init();
+  beforeAll(async () => {
+    ctx = await createTestApp();
   });
 
   afterEach(async () => {
-    await app.close();
+    await truncateDatabase(ctx.dataSource);
+    await clearTestRedis(ctx.redis);
+  });
+
+  afterAll(async () => {
+    if (ctx?.app) {
+      await ctx.app.close();
+    }
   });
 
   it('/api/hello (GET)', () => {
-    return request(app.getHttpServer())
+    return request(ctx.app.getHttpServer())
       .get('/api/hello')
       .expect(200)
       .expect('Hello World!');
   });
 
   it('/api/hello?lang=vi (GET)', () => {
-    return request(app.getHttpServer())
+    return request(ctx.app.getHttpServer())
       .get('/api/hello?lang=vi')
       .expect(200)
       .expect('Xin chào thế giới!');
   });
 
   it('/api/hello (GET) - Accept-Language: vi', () => {
-    return request(app.getHttpServer())
+    return request(ctx.app.getHttpServer())
       .get('/api/hello')
       .set('Accept-Language', 'vi')
       .expect(200)
@@ -44,7 +46,7 @@ describe('HelloController (e2e)', () => {
   });
 
   it('/api/hello (GET) - x-custom-lang: vi', () => {
-    return request(app.getHttpServer())
+    return request(ctx.app.getHttpServer())
       .get('/api/hello')
       .set('x-custom-lang', 'vi')
       .expect(200)

@@ -17,6 +17,7 @@ import { ArticlesModule } from './articles/articles.module';
 import { AuthModule } from './auth/auth.module';
 import { CommentsModule } from './comments/comments.module';
 import { Comment } from './comments/entities/comment.entity';
+import { DATABASE_MIGRATIONS } from './database/migrations';
 import { HelloModule } from './hello/hello.module';
 import { Follow } from './profiles/entities/follow.entity';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -28,7 +29,11 @@ const DEFAULT_DB_PORT = 5432;
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath:
+        process.env.NODE_ENV === 'test' ? ['.env.test', '.env'] : '.env',
+    }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -47,6 +52,7 @@ const DEFAULT_DB_PORT = 5432;
           ArticleFavorite,
           Comment,
         ],
+        migrations: DATABASE_MIGRATIONS,
         synchronize: false,
       }),
     }),
@@ -54,7 +60,9 @@ const DEFAULT_DB_PORT = 5432;
       fallbackLanguage: 'en',
       loaderOptions: {
         path: path.join(__dirname, '/i18n/'),
-        watch: process.env.NODE_ENV !== 'production',
+        watch:
+          process.env.NODE_ENV !== 'production' &&
+          process.env.NODE_ENV !== 'test',
       },
       resolvers: [
         { use: QueryResolver, options: ['lang'] },

@@ -5,6 +5,7 @@ import { REDIS_CLIENT } from './redis.constants';
 import { RedisService } from './redis.service';
 
 const DEFAULT_REDIS_PORT = 6379;
+const DEFAULT_REDIS_DB = 0;
 
 @Global()
 @Module({
@@ -18,6 +19,7 @@ const DEFAULT_REDIS_PORT = 6379;
           port:
             Number(configService.get<number>('REDIS_PORT')) ||
             DEFAULT_REDIS_PORT,
+          db: Number(configService.get<number>('REDIS_DB')) || DEFAULT_REDIS_DB,
         });
       },
     },
